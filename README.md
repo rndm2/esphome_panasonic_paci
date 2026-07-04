@@ -45,7 +45,15 @@ Non-PACi Panasonic products (Etherea/residential splits, Aquarea, VRF/ME) are no
 
 ## Hardware / Wiring
 
-This component needs a UART interface connected to the Panasonic PACi controller/WLAN bus.
+This component needs access to the Panasonic PACi WLAN-module UART interface.
+
+This is the same interface used by the original Panasonic **DNSK-P11** Wi-Fi module.
+
+On Panasonic boards/adaptors this connector may be labelled **CN-WLAN**. In this documentation it is referred to as the **CN-WLAN / DNSK-P11 host connector**.
+
+The PACi-to-CN-WLAN bridge/interface may already be provided by existing hardware, such as the Panasonic **CZ-CAPWFC1** adaptor or some proprietary Intesis-based installations.
+
+![wiring](./wiring.png)
 
 A convenient hardware reference is the **P11** board by Ingenious Makers:
 
