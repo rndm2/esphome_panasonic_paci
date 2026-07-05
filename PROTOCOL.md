@@ -7,14 +7,14 @@
 
 Status: reverse-engineering notes, not an official Panasonic specification.  
 Scope: Panasonic **PACi** indoor unit **S-100PF1E5A** with outdoor unit **U-100PEY1E5**, DNSK-P11/CN-WLAN/CN-CNT style UART traffic, ESPHome component `panasonic_paci`.  
-Last updated: 2026-06-07.
+Last updated: 2026-07-05.
 
 ## 1. Hardware / UART
 
-Observed setup:
+Observed / confirmed PACi setups:
 
-- Indoor unit: `S-100PF1E5A`
-- Outdoor unit: `U-100PEY1E5`
+- Indoor unit: `S-100PF1E5A`, outdoor unit: `U-100PEY1E5`
+- Indoor unit: `S-100PE1R5A`, outdoor unit: `U-100PE1R5A`
 - ESP: ESP32-C3
 - Hardware reference: Ingenious Makers P11 (`https://www.ingeniousmakers.com/p11`)
 - UART:
@@ -124,6 +124,13 @@ Observed responses:
 Do not treat residential Panasonic/DomiStyle/`5A` protocol logic as authoritative. This component is based on real PACi DNSK-P11/CN-WLAN/CN-CNT UART captures.
 
 ## 5. Main climate status
+
+Main status can be observed in at least two lengths:
+
+- `LEN=0x0B`: base climate status payload.
+- `LEN=0x10`: base climate status payload plus an extra tail. The extra tail is currently ignored.
+
+The decoder reads the known offsets after `80 81` and ignores unknown trailing bytes.
 
 Main status frame examples:
 
@@ -873,3 +880,18 @@ Do not treat admin settings as boolean switches
 Do not optimistically trust admin write without read-back
 Do not attach a value-only admin response unless a matching `WaitAdminValue` transaction is active
 ```
+
+
+## Current multi-device parser notes
+
+The current parser intentionally handles only stable state sources and known transactions.
+
+Confirmed variants from PACi logs:
+
+- Main climate status appears as both `00 FE 58 0B ... 80 81 ...` and `00 FE 58 10 ... 80 81 ...`. Known offsets are decoded; extra tail bytes are ignored.
+- Admin read responses appear as both `80 07 VV` and `80 07 VV KK`. If the code `KK` is present it is used directly; otherwise the pending admin transaction supplies the code.
+- Outdoor-unit temperature is confirmed via extended `EF/21`. Both ESP-requested `00 E0 1A ... EF ... 21 HH LL` and wired-controller-passive `00 40 1A ... EF ... 21 HH LL` responses are accepted.
+- Wired-controller `40 00 55 ...` status polls, auxiliary block `0x0C`, and auxiliary block `0x21` are recognized as known-unused traffic and are not used as HA state.
+- ESP TX echo frames are ignored.
+
+Known-unused frames are valid bus traffic. They are logged at very-verbose level rather than reported as protocol errors.

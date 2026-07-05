@@ -451,6 +451,7 @@ void PanasonicPaciWLAN::send_raw_frame_(const std::vector<uint8_t> &frame) {
   this->write_array(frame);
   this->flush();
 
+  this->last_tx_frame_ = frame;
   this->log_packet(frame, true);
 }
 
@@ -538,6 +539,7 @@ void PanasonicPaciWLAN::process_tx_queue_() {
   this->command_sent_at_ = now;
   this->next_command_allowed_at_ = now + COMMAND_GAP;
   this->current_transaction_ = item;
+  this->last_tx_frame_ = item.frame;
 
   switch (item.kind) {
     case TxKind::WaitAck:
@@ -979,7 +981,66 @@ void PanasonicPaciWLAN::handle_frame_(const std::vector<uint8_t> &frame) {
     return;
   }
 
+  if (this->is_own_tx_echo_(frame)) {
+    ESP_LOGVV(TAG, "Ignoring own TX echo: %s", format_hex_pretty(frame).c_str());
+    return;
+  }
+
+  if (this->handle_known_unused_frame_(frame)) {
+    return;
+  }
+
   ESP_LOGV(TAG, "Unhandled valid frame: %s", format_hex_pretty(frame).c_str());
+}
+
+bool PanasonicPaciWLAN::is_own_tx_echo_(const std::vector<uint8_t> &frame) const {
+  return !this->last_tx_frame_.empty() && frame == this->last_tx_frame_;
+}
+
+bool PanasonicPaciWLAN::handle_known_unused_frame_(const std::vector<uint8_t> &frame) {
+  // Wired wall-controller main-status poll. A separate 00 FE 58 ... 80 81
+  // status broadcast follows and is the actual source for HA climate state.
+  if (frame.size() == 9 && frame[0] == FRAME_SRC_WIRED && frame[1] == FRAME_ADDR_ZERO &&
+      frame[2] == OP_READ_ALT && frame[3] == 0x04 && frame[4] == GROUP_CONTROL &&
+      frame[5] == STATUS_MAIN) {
+    ESP_LOGVV(TAG, "Ignoring wall-controller status poll: %s", format_hex_pretty(frame).c_str());
+    return true;
+  }
+
+  // Wired wall-controller auxiliary/status/config blocks observed on multiple PACi installs.
+  // They are valid traffic, but not a safe HA state source without controlled captures.
+  if (frame.size() < 4) {
+    return false;
+  }
+  for (size_t i = 0; i + 1 < frame.size(); i++) {
+    const bool request_block = frame[0] == FRAME_SRC_WIRED && frame[2] == OP_READ &&
+                               frame[i] == GROUP_CONTROL && (frame[i + 1] == 0x0C || frame[i + 1] == 0x21);
+    const bool response_block = frame[0] == FRAME_SRC_EVENT && frame[1] == FRAME_SRC_WIRED &&
+                                frame[2] == OP_RESPONSE && frame[i] == RESP_ACK_0 &&
+                                (frame[i + 1] == 0x0C || frame[i + 1] == 0x21);
+    if (request_block || response_block) {
+      ESP_LOGVV(TAG, "Ignoring wall-controller auxiliary block 0x%02X: %s", frame[i + 1],
+                format_hex_pretty(frame).c_str());
+      return true;
+    }
+  }
+
+  // Cold-init/config responses that are intentionally sent in the observed WLAN init sequence,
+  // but are not currently used as HA state.
+  for (size_t i = 0; i + 1 < frame.size(); i++) {
+    if (frame[i] == RESP_ACK_0 && (frame[i + 1] == 0x0A || frame[i + 1] == 0x0D)) {
+      ESP_LOGVV(TAG, "Ignoring cold-init config block 0x%02X: %s", frame[i + 1],
+                format_hex_pretty(frame).c_str());
+      return true;
+    }
+    if (i + 4 < frame.size() && frame[i] == RESP_ACK_0 && frame[i + 1] == STATUS_EXTENDED_UNIT &&
+        frame[i + 2] == RESP_ACK_0 && frame[i + 3] == 0x00 && frame[i + 4] == 0x38) {
+      ESP_LOGVV(TAG, "Ignoring cold-init extended block EF/38: %s", format_hex_pretty(frame).c_str());
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool PanasonicPaciWLAN::handle_ack_(const std::vector<uint8_t> &frame) {
@@ -1118,6 +1179,30 @@ bool PanasonicPaciWLAN::handle_admin_response_(const std::vector<uint8_t> &frame
     }
   }
 
+  // Some PACi/CN-WLAN bridges return the admin read as:
+  //   00 E0 18 04 80 07 <value> <code> <xor>
+  // This form is self-describing, so it can be applied even if no transaction is pending.
+  for (size_t i = 0; i + 3 < frame.size(); i++) {
+    if (frame[i] == RESP_ACK_0 && frame[i + 1] == CMD_ADMIN_SETTINGS) {
+      const uint8_t value = frame[i + 2];
+      const uint8_t code = frame[i + 3];
+
+      if (code == ADMIN_CODE_VENTILATION_OUTPUT || code == ADMIN_CODE_ROOM_TEMP_SENSOR ||
+          code == ADMIN_CODE_TEMP_DISPLAY_UNIT) {
+        ESP_LOGD(TAG, "Admin read response: code=0x%02X value=0x%02X", code, value);
+        this->update_admin_setting_(code, value);
+
+        if (this->state_ == ACState::WaitingAdminValue &&
+            this->current_transaction_.kind == TxKind::WaitAdminValue &&
+            this->current_transaction_.admin_code == code) {
+          this->complete_admin_read_transaction_();
+        }
+
+        return true;
+      }
+    }
+  }
+
   // Admin read responses observed on this bus are value-only:
   //   00 E0 18 03 80 07 <value> <xor>
   //   00 40 18 03 80 07 <value> <xor>
@@ -1253,7 +1338,11 @@ bool PanasonicPaciWLAN::handle_identity_response_(const std::vector<uint8_t> &fr
     if (frame[i] == RESP_ACK_0 && frame[i + 1] == INFO_UNIT_EXTENDED && frame[i + 2] == RESP_ACK_0 &&
         frame[i + 3] == 0x00 && (frame[i + 4] == INFO_MODEL || frame[i + 4] == INFO_SERIAL)) {
       const uint8_t code = frame[i + 4];
-      const std::string value = extract_ascii_string_(frame, i + 5, 18);
+      size_t ascii_max_len = 18;
+      if (frame.size() > 3 && frame[3] >= 5) {
+        ascii_max_len = std::min<size_t>(ascii_max_len, frame[3] - 5);
+      }
+      const std::string value = extract_ascii_string_(frame, i + 5, ascii_max_len);
 
       if (value.empty()) {
         return true;
