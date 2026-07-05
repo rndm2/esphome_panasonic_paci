@@ -7,11 +7,7 @@
 
 ESPHome climate component for Panasonic **PACi** air conditioners using the wired UART bus used by Panasonic wall controllers and WLAN/controller modules.
 
-This component is developed and tested against:
-
-- Indoor unit: `S-100PF1E5A`
-- Outdoor unit: `U-100PEY1E5`
-- Bus: Panasonic PACi wired UART controller/WLAN bus
+This component is developed and tested against Panasonic PACi wired UART controller/WLAN bus.
 
 The current implementation target is the `wlan` backend only. The name is historical; this is a wired UART protocol implementation, not a Wi-Fi cloud integration.
 

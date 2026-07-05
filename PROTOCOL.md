@@ -6,7 +6,7 @@
 > product. Other Panasonic lines use different protocols and are out of scope.
 
 Status: reverse-engineering notes, not an official Panasonic specification.  
-Scope: Panasonic **PACi** indoor unit **S-100PF1E5A** with outdoor unit **U-100PEY1E5**, DNSK-P11/CN-WLAN/CN-CNT style UART traffic, ESPHome component `panasonic_paci`.  
+Scope: Panasonic **PACi** indoor unit **S-100PF1E5A**/**S-100PE1R5A** with outdoor unit **U-100PEY1E5**/**U-100PE1R5A**, DNSK-P11/CN-WLAN/CN-CNT style UART traffic, ESPHome component `panasonic_paci`.  
 Last updated: 2026-07-05.
 
 ## 1. Hardware / UART
