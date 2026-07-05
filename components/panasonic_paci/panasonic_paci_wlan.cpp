@@ -51,6 +51,7 @@ void PanasonicPaciWLAN::loop() {
                this->current_transaction_.attempt, COMMAND_MAX_RETRIES);
       this->write_array(this->current_transaction_.frame);
       this->flush();
+      this->last_tx_frame_ = this->current_transaction_.frame;
       this->command_sent_at_ = now;
       this->next_command_allowed_at_ = now + COMMAND_RETRY_GAP;
       this->log_packet(this->current_transaction_.frame, true);
@@ -68,6 +69,7 @@ void PanasonicPaciWLAN::loop() {
                this->current_transaction_.admin_code, this->current_transaction_.attempt, ADMIN_READ_MAX_RETRIES);
       this->write_array(this->current_transaction_.frame);
       this->flush();
+      this->last_tx_frame_ = this->current_transaction_.frame;
       this->command_sent_at_ = now;
       this->next_command_allowed_at_ = now + ADMIN_READ_RETRY_DELAY;
       this->log_packet(this->current_transaction_.frame, true);

@@ -17,7 +17,7 @@
 namespace esphome {
 namespace panasonic_paci {
 
-static const char *const VERSION = "0.3.2";
+static const char *const VERSION = "0.3.3";
 
 static constexpr uint16_t BUFFER_SIZE = 256;
 
