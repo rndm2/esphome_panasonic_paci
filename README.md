@@ -35,12 +35,10 @@ Implemented protocol support:
 
 Panasonic **PACi** systems only.
 
-Tested target:
+Confirmed on multiple PACi installations using the CN-WLAN / DNSK-P11-style UART interface.
 
-- Indoor unit: `S-100PF1E5A`
-- Outdoor unit: `U-100PEY1E5`
+Compatibility depends on the PACi WLAN-module interface and protocol variant.
 
-Other Panasonic PACi units likely use a similar protocol, but they are not confirmed.
 Non-PACi Panasonic products (Etherea/residential splits, Aquarea, VRF/ME) are not supported.
 
 ## Hardware / Wiring
@@ -51,9 +49,27 @@ This is the same interface used by the original Panasonic **DNSK-P11** Wi-Fi mod
 
 On Panasonic boards/adaptors this connector may be labelled **CN-WLAN**. In this documentation it is referred to as the **CN-WLAN / DNSK-P11 host connector**.
 
-The PACi-to-CN-WLAN bridge/interface may already be provided by existing hardware, such as the Panasonic **CZ-CAPWFC1** adaptor or some proprietary Intesis-based installations.
+The interface between the PACi unit and the WLAN module may already be provided by existing hardware, such as the Panasonic **CZ-CAPWFC1** adaptor or some proprietary Intesis-based installations.
 
-![wiring](./wiring.png)
+Some CZ-CAPWFC1 bridge boards are marked `ACXA70-11340`. That board is the PACi/R1-R2 to DNSK-P11/CN-WLAN bridge. In that setup, the ESP connects to the WLAN-module side of the bridge board, replacing the DNSK-P11 module.
+
+![DNSK-P11 wiring](./wiring.png)
+
+The DNSK-P11 connector is physically an 8-pin connector, but this component only uses four pins:
+
+| DNSK-P11 pin | Signal | ESP connection |
+| --- | --- | --- |
+| Pin 1 | 5V | 5V / VBUS |
+| Pin 2 | UART_Rx | ESP TX |
+| Pin 3 | UART_Tx | ESP RX |
+| Pin 8 | GND | GND |
+
+TX/RX must be crossed:
+
+```text
+DNSK-P11 UART_Tx -> ESP RX
+DNSK-P11 UART_Rx -> ESP TX
+```
 
 A convenient hardware reference is the **P11** board by Ingenious Makers:
 

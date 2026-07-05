@@ -100,6 +100,7 @@ class PanasonicPaciWLAN : public PanasonicPaci {
   uint32_t command_sent_at_{0};
   uint32_t next_command_allowed_at_{0};
   QueuedFrame current_transaction_{};
+  std::vector<uint8_t> last_tx_frame_{};
 
   bool active_init_started_{false};
   uint8_t active_init_step_{0};
@@ -191,6 +192,8 @@ class PanasonicPaciWLAN : public PanasonicPaci {
   bool handle_admin_response_(const std::vector<uint8_t> &frame);
   bool handle_identity_response_(const std::vector<uint8_t> &frame);
   bool handle_outdoor_temperature_(const std::vector<uint8_t> &frame);
+  bool handle_known_unused_frame_(const std::vector<uint8_t> &frame);
+  bool is_own_tx_echo_(const std::vector<uint8_t> &frame) const;
 
   void parse_main_status_payload_(const uint8_t *payload, size_t len);
   void update_admin_setting_(uint8_t code, uint8_t value);
